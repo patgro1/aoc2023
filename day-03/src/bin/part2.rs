@@ -1,80 +1,114 @@
+use std::cmp::{max, min};
+
 fn main() {
     let input = include_str!("input1.txt");
     print!("{}", process(input))
 }
 
+#[derive(Debug)]
+pub struct Point {
+    line: usize,
+    char: usize,
+}
+
+#[derive(Debug)]
+pub struct PartNum {
+    number: u32,
+    line: usize,
+    start: usize,
+    end: usize,
+}
+
 fn process(input: &str) -> u32 {
-    let lines: Vec<&str> = input.lines().collect();
-    let mut matrix: Vec<Vec<char>> = vec![];
-    for line in lines {
-        let mut line: Vec<_> = line.chars().collect();
-        line.insert(0, '.');
-        line.push('.');
-        matrix.push(line)
-    }
-    matrix.push(vec!['.'; matrix[0].len()]);
-    matrix.insert(0, vec!['.'; matrix[0].len()]);
-
-    let mut part_numbers: Vec<u32> = vec![];
-
-    for (current_line, line) in matrix.iter().enumerate() {
-        let mut current_char = 0;
-        let mut line_iter = line.iter();
-        // println!("{:?}", line);
-        while let Some(ch) = line_iter.next() {
-            if ch.is_ascii_digit() {
-                let starting_char = current_char;
-                let mut ending_char = current_char;
-                let mut number: u32 = ch.to_digit(10).unwrap();
-                for n_ch in line_iter.by_ref() {
-                    current_char += 1;
+    let mut symbols: Vec<Point> = vec![];
+    let mut numbers: Vec<PartNum> = vec![];
+    let mut line_length: usize = 0;
+    for (line_idx, line) in input.lines().enumerate() {
+        line_length = line.len();
+        let mut c_idx: usize = 0;
+        let mut line_iter = line.chars().peekable();
+        while let Some(chr) = line_iter.next() {
+            if chr.is_ascii_digit() {
+                let mut end_idx = c_idx;
+                let start_idx = c_idx;
+                let mut number: u32 = chr.to_digit(10).unwrap();
+                while let Some(n_ch) = line_iter.by_ref().next() {
+                    c_idx += 1;
                     if n_ch.is_ascii_digit() {
-                        ending_char += 1;
+                        end_idx += 1;
                         number *= 10;
-                        number += n_ch.to_digit(10).unwrap();
+                        number += n_ch.to_digit(10).unwrap()
                     } else {
-                        // println!(
-                        //     "Found a number at {starting_line}, {starting_char} => {ending_char}"
-                        // );
-                        //Check if the number is adjacent to a symbol
-                        if !line[starting_char - 1].is_ascii_digit()
-                            && line[starting_char - 1] != '.'
-                        {
-                            // println!("{number} is a valid part number");
-                            part_numbers.push(number)
+                        numbers.push(PartNum {
+                            number,
+                            line: line_idx,
+                            start: start_idx,
+                            end: end_idx,
+                        });
+                        // Special case if we have a symbol
+                        if n_ch == '*' {
+                            symbols.push(Point {
+                                line: line_idx,
+                                char: c_idx,
+                            });
                         }
-                        if !line[ending_char + 1].is_ascii_digit() && line[ending_char + 1] != '.' {
-                            // println!("{number} is a valid part number");
-                            part_numbers.push(number)
+                        break;
+                    }
+                    // Peek if the next char is existing and not a digit
+                    // let next_possible = line_iter.peek();
+                    if let Some(next_possible) = line_iter.by_ref().peek() {
+                        if !next_possible.is_ascii_digit() {
+                            numbers.push(PartNum {
+                                number,
+                                line: line_idx,
+                                start: start_idx,
+                                end: end_idx,
+                            });
+                            break;
                         }
-                        if matrix[current_line - 1][starting_char - 1..=ending_char + 1]
-                            .iter()
-                            .filter(|x| !x.is_ascii_digit() && **x != '.')
-                            .count()
-                            > 0
-                        {
-                            // println!("{number} is a valid part number");
-                            part_numbers.push(number)
-                        }
-                        if matrix[current_line + 1][starting_char - 1..=ending_char + 1]
-                            .iter()
-                            .filter(|x| !x.is_ascii_digit() && **x != '.')
-                            .count()
-                            > 0
-                        {
-                            // println!("{number} is a valid part number");
-                            part_numbers.push(number)
-                        }
-
+                    } else {
+                        numbers.push(PartNum {
+                            number,
+                            line: line_idx,
+                            start: start_idx,
+                            end: end_idx,
+                        });
                         break;
                     }
                 }
+                c_idx += 1;
+            } else if chr == '*' {
+                symbols.push(Point {
+                    line: line_idx,
+                    char: c_idx,
+                });
+                c_idx += 1;
+            } else {
+                c_idx += 1;
             }
-            current_char += 1
         }
     }
-    part_numbers.iter().sum()
+    let mut gear_ratios: Vec<u32> = vec![];
+    for possible_gear in symbols {
+        // This should never fail because we are capping the minimum at 0
+        let min_line: usize = max(possible_gear.line as i32 - 1, 0).try_into().unwrap();
+        let max_line: usize = min(possible_gear.line + 1, input.lines().count() - 1);
+        // This should never fail because we are capping the minimum at 0
+        let min_idx: usize = max(possible_gear.char as i32 - 1, 0).try_into().unwrap();
+        let max_idx: usize = min(possible_gear.char + 1, line_length - 1);
+        // Up
+        let adjacent_numbers: Vec<_> = numbers
+            .iter()
+            .filter(|x| min_line <= x.line && x.line <= max_line)
+            .filter(|x| min_idx <= x.end && x.start <= max_idx)
+            .collect();
+        if adjacent_numbers.len() == 2 {
+            gear_ratios.push(adjacent_numbers[0].number * adjacent_numbers[1].number);
+        }
+    }
+    gear_ratios.iter().sum()
 }
+
 
 #[cfg(test)]
 mod test {
